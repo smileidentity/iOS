@@ -71,22 +71,51 @@ final class SelfieViewModelTests: XCTestCase {
         let safeArea = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
         selfieViewModel.perform(action: .windowSizeDetected(windowSize, safeArea))
         selfieViewModel.perform(action: .onViewAppear)
-        
+
         XCTAssertEqual(
             mockFaceValidator.faceGuideFrame,
             CGRect(x: 71.5, y: 100, width: 250, height: 350)
         )
         XCTAssertEqual(selfieViewModel.selfieCaptureState, .capturingSelfie)
     }
-    
-    /*
-    func testInitialStates() {
-        selfieViewModel.perform(action: .onViewAppear)
-        
+
+    func testInitialSetup_ShouldSetupDependencies() {
+        XCTAssertNotNil(mockFaceDetector.resultDelegate)
+        XCTAssertNotNil(mockFaceValidator.delegate)
+        XCTAssertNotNil(stubLivenessManager.delegate)
+        XCTAssertNotNil(mockFaceValidator.delegate)
     }
-    */
-    
-    // func 
+
+    func testBasics() {
+        let testImage = createTestUIImage()
+        guard let testImageBuffer = createTestImageBuffer(with: testImage) else {
+            XCTFail("Test Image Buffer shoud not be nil")
+            return
+        }
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+        stubCameraManager.sendSampleBuffer(testImageBuffer)
+    }
+}
+
+// MARK: Helper Methods
+extension SelfieViewModelTests {
+    private func createTestUIImage() -> UIImage? {
+        guard let imagePath = Bundle(for: type(of: self))
+            .path(forResource: "sample_selfie", ofType: "jpg") else {
+            return nil
+        }
+        return UIImage(contentsOfFile: imagePath)
+    }
+
+    private func createTestImageBuffer(with uiImage: UIImage?) -> CVPixelBuffer? {
+        return uiImage?.pixelBuffer(width: 360, height: 640)
+    }
 }
 
 // MARK: Mocks & Stubs
@@ -141,14 +170,22 @@ class StubCameraManager: CameraManager {
     var sessionPaused: Bool = false
 
     private var cancellable: AnyCancellable?
-    @Published var buffer: CVPixelBuffer?
+    @Published var cameraSamplebuffer: CVPixelBuffer?
+    
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         super.init(orientation: .portrait)
+
+        sampleBufferPublisher
+            .sink { buffer in
+                print("buffer received")
+            }
+            .store(in: &cancellables)
     }
 
     override var sampleBufferPublisher: Published<CVPixelBuffer?>.Publisher {
-        $buffer
+        $cameraSamplebuffer
     }
 
     override func switchCamera(to position: AVCaptureDevice.Position) {
@@ -157,5 +194,11 @@ class StubCameraManager: CameraManager {
 
     override func pauseSession() {
         sessionPaused = true
+    }
+    
+    func sendSampleBuffer(_ buffer: CVPixelBuffer) {
+        DispatchQueue.main.async {
+            self.cameraSamplebuffer = buffer
+        }
     }
 }
