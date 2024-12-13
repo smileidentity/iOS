@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-* Fixed missing idType on Document Verification Jobs
+### Added
 * Introduce screens for the new Enhanced Selfie Capture Enrollment and Authentication Products.
+
+### Fixed
+* Fixed missing idType on Document Verification Jobs
 
 ## 10.2.17
 
