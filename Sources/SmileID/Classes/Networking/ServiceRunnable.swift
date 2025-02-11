@@ -1,4 +1,5 @@
 import Foundation
+import SmileIDSecurity
 
 protocol ServiceRunnable {
     var serviceClient: RestServiceClient { get }
@@ -66,7 +67,8 @@ extension ServiceRunnable {
                 .contentType(value: "application/json"),
                 .partnerID(value: SmileID.config.partnerId),
                 .sourceSDK(value: "iOS"),
-                .sourceSDKVersion(value: SmileID.version)
+                .sourceSDKVersion(value: SmileID.version),
+                .requestTimestamp(value: Date().toISO8601WithMilliseconds())
             ],
             body: body
         )
@@ -80,7 +82,8 @@ extension ServiceRunnable {
             headers: [
                 .partnerID(value: SmileID.config.partnerId),
                 .sourceSDK(value: "iOS"),
-                .sourceSDKVersion(value: SmileID.version)
+                .sourceSDKVersion(value: SmileID.version),
+                .requestTimestamp(value: Date().toISO8601WithMilliseconds())
             ]
         )
         return try await serviceClient.send(request: request)
@@ -108,6 +111,7 @@ extension ServiceRunnable {
         headers.append(.timestamp(value: timestamp))
         headers.append(.sourceSDK(value: "iOS"))
         headers.append(.sourceSDKVersion(value: SmileID.version))
+        headers.append(.requestTimestamp(value: Date().toISO8601WithMilliseconds()))
         let request = try await createMultiPartRequest(
             url: path,
             method: .post,
@@ -132,7 +136,7 @@ extension ServiceRunnable {
     private func createMultiPartRequest(
         url: PathType,
         method: RestMethod,
-        headers: [HTTPHeader]? = nil,
+        headers: [HTTPHeader],
         uploadData: Data
     ) async throws -> RestRequest {
         let path = String(describing: url)
@@ -148,10 +152,20 @@ extension ServiceRunnable {
             throw URLError(.badURL)
         }
 
+        guard let header = headers.first(where: { $0.name == "SmileID-Request-Timestamp" }) else {
+            throw SmileIDError.missingHeader("Header with name `SmileId-Request-Timestamp` not found.")
+        }
+        let requestMac = try SmileIDCryptoManager.shared.sign(
+            timestamp: header.value,
+            headers: headers.toDictionary(),
+            payload: uploadData
+        )
+        var signedHeaders = headers + [.requestMac(value: requestMac)]
+
         let request = RestRequest(
             url: url,
             method: method,
-            headers: headers,
+            headers: signedHeaders,
             body: uploadData
         )
         return request
@@ -174,13 +188,14 @@ extension ServiceRunnable {
     private func createUploadRequest(
         url: String,
         method: RestMethod,
-        headers: [HTTPHeader]? = nil,
+        headers: [HTTPHeader],
         uploadData: Data,
         queryParameters _: [HTTPQueryParameters]? = nil
     ) async throws -> RestRequest {
         guard let url = URL(string: url) else {
             throw URLError(.badURL)
         }
+
         let request = RestRequest(
             url: url,
             method: method,
@@ -193,20 +208,45 @@ extension ServiceRunnable {
     private func createRestRequest<T: Encodable>(
         path: PathType,
         method: RestMethod,
-        headers: [HTTPHeader]? = nil,
+        headers: [HTTPHeader],
         queryParameters: [HTTPQueryParameters]? = nil,
         body: T
     ) async throws -> RestRequest {
         let path = String(describing: path)
-        guard let url = baseURL?.appendingPathComponent(path) else {
+        guard var url = baseURL?.appendingPathComponent(path) else {
             throw URLError(.badURL)
         }
+        
+        print(path)
+        if path == "id_verification" {
+            url = URL(string: "https://us-west-2.validate-payload-signature.api.smileid.co/v1/id_verification")!
+        }
+        print(url)
+
+        print("body:")
+        print(body)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        encoder.keyEncodingStrategy = .useDefaultKeys
+        let payload = try encoder.encode(body)
+        print("payload sorted:")
+        print(String(data: payload, encoding: .utf8))
+        guard let header = headers.first(where: { $0.name == "SmileID-Request-Timestamp" }) else {
+            throw SmileIDError.missingHeader("Header with name `SmileId-Request-Timestamp` not found.")
+        }
+        let requestMac = try SmileIDCryptoManager.shared.sign(
+            timestamp: header.value,
+            headers: headers.toDictionary(),
+            payload: payload
+        )
+        let signedHeaders = headers + [.requestMac(value: requestMac)]
+        print(signedHeaders)
 
         do {
             let request = try RestRequest(
                 url: url,
                 method: method,
-                headers: headers,
+                headers: signedHeaders,
                 queryParameters: queryParameters,
                 body: body
             )
@@ -219,7 +259,7 @@ extension ServiceRunnable {
     private func createRestRequest(
         path: PathType,
         method: RestMethod,
-        headers: [HTTPHeader]? = nil,
+        headers: [HTTPHeader],
         queryParameters: [HTTPQueryParameters]? = nil
     ) throws -> RestRequest {
         let path = String(describing: path)
@@ -227,10 +267,19 @@ extension ServiceRunnable {
             throw URLError(.badURL)
         }
 
+        guard let header = headers.first(where: { $0.name == "SmileID-Request-Timestamp" }) else {
+            throw SmileIDError.missingHeader("Header with name `SmileId-Request-Timestamp` not found.")
+        }
+        let requestMac = try SmileIDCryptoManager.shared.sign(
+            timestamp: header.value,
+            headers: headers.toDictionary()
+        )
+        let signedHeaders = headers + [.requestMac(value: requestMac)]
+
         let request = RestRequest(
             url: url,
             method: method,
-            headers: headers,
+            headers: signedHeaders,
             queryParameters: queryParameters
         )
         return request

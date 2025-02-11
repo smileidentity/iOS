@@ -11,6 +11,7 @@ Pod::Spec.new do |s|
   s.dependency 'FingerprintJS'
   s.dependency 'lottie-ios', '~> 4.4.2'
   s.swift_version = '5.5'
+  s.vendored_frameworks = 'SmileIDSecurity.xcframework'
   s.source_files = 'Sources/SmileID/Classes/**/*'
   s.resource_bundles = {
     'SmileID_SmileID' => ['Sources/SmileID/Resources/**/*.{storyboard,storyboardc,xib,nib,xcassets,json,png,ttf,lproj,xcprivacy,mlmodel,mlmodelc,lottie}']
