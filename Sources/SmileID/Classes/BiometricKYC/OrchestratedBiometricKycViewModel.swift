@@ -143,6 +143,9 @@ class OrchestratedBiometricKycViewModel: ObservableObject {
         if let livenessFiles {
             allFiles.append(contentsOf: livenessFiles)
         }
+        if let securityInfoJson = try LocalStorage.addSecurityInfo(jobId: jobId, files: allFiles) {
+            allFiles.append(contentsOf: [securityInfoJson])
+        }
         return try LocalStorage.zipFiles(at: allFiles)
     }
 
